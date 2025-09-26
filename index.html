@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>异步寻宝动画游戏</title>
+  <style>
+    body { background: #222; color: #fff; font-family: '微软雅黑', sans-serif; text-align: center; }
+    #treasure-log { width: 80%; margin: 40px auto; background: #333; border-radius: 10px; min-height: 200px; padding: 20px; box-shadow: 0 0 20px #0008; font-size: 1.2em; }
+    .step { margin: 20px 0; opacity: 0; transform: translateY(30px); transition: all 0.7s; }
+    .step.visible { opacity: 1; transform: translateY(0); }
+    .success { color: #ffd700; font-weight: bold; }
+    .fail { color: #ff5252; font-weight: bold; }
+    #start-btn { padding: 12px 32px; font-size: 1.2em; border: none; border-radius: 6px; background: linear-gradient(90deg,#ff9800,#ffd700); color: #222; cursor: pointer; margin-top: 30px; }
+    #start-btn:disabled { background: #888; color: #ccc; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <h1>异步寻宝动画游戏</h1>
+  <div id="treasure-log"></div>
+  <button id="start-btn">开始寻宝</button>
+  <script src="treasure.js"></script>
+  <script>
+    // 动画展示
+    function showStep(msg, type) {
+      const log = document.getElementById('treasure-log');
+      const div = document.createElement('div');
+      div.className = 'step' + (type ? ' ' + type : '');
+      div.textContent = msg;
+      log.appendChild(div);
+      setTimeout(() => div.classList.add('visible'), 100);
+      log.scrollTop = log.scrollHeight;
+      return div;
+    }
+
+    // 谜题
+    const riddles = [
+      { q: '什么东西越洗越脏？（答案为一个字）', a: '水' }
+    ];
+
+    // askRiddle 只允许一次回答，返回用户输入
+    function askRiddleOnce() {
+      return new Promise((resolve) => {
+        const idx = Math.floor(Math.random() * riddles.length);
+        const riddle = riddles[idx];
+        const div = showStep('线索谜题：' + riddle.q);
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = '请输入答案';
+        input.style.margin = '10px';
+        input.style.fontSize = '1em';
+        const btn = document.createElement('button');
+        btn.textContent = '提交';
+        btn.style.fontSize = '1em';
+        btn.style.marginLeft = '10px';
+        div.appendChild(document.createElement('br'));
+        div.appendChild(input);
+        div.appendChild(btn);
+        input.focus();
+        btn.onclick = () => {
+          const userInput = input.value.trim();
+          if (userInput) {
+            // 只允许一次提交
+            input.disabled = true;
+            btn.disabled = true;
+            resolve(userInput);
+          }
+        };
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') btn.onclick();
+        });
+      });
+    }
+
+    async function animatedTreasureHunt() {
+      document.getElementById('start-btn').disabled = true;
+      document.getElementById('treasure-log').innerHTML = '';
+      try {
+        const clue = await TreasureMap.getInitialClue();
+        showStep(clue);
+
+        // 联动谜题输入，传递给 solveRiddle
+        const userAnswer = await askRiddleOnce();
+        const riddleResult = await TreasureMap.solveRiddle(() => userAnswer);
+        if (riddleResult.success) {
+          showStep('谜题回答正确！', 'success');
+        } else {
+          showStep('谜题回答错误！', 'fail');
+        }
+
+        // decodeAncientScript 依赖谜题结果
+        let location;
+        try {
+          location = await TreasureMap.decodeAncientScript(riddleResult);
+          showStep(location);
+        } catch (e) {
+          showStep('任务失败: ' + e, 'fail');
+          document.getElementById('start-btn').disabled = false;
+          return;
+        }
+
+        // 只有解码成功后遇到NPC
+        const npc = await TreasureMap.meetNPC();
+        showStep(npc);
+
+        const box = await TreasureMap.searchTemple(location);
+        showStep(box);
+        const treasure = await TreasureMap.openTreasureBox();
+        showStep(treasure, 'success');
+      } catch (e) {
+        showStep('任务失败: ' + e, 'fail');
+      }
+      document.getElementById('start-btn').disabled = false;
+    }
+
+    document.getElementById('start-btn').onclick = animatedTreasureHunt;
+  </script>
+</body>
+</html>
